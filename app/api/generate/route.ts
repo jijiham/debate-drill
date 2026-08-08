@@ -12,7 +12,7 @@ export async function POST(request: Request) {
   const result = await anthropic.messages.create({
     model: "claude-sonnet-4-5",
     max_tokens: 1000,
-    system: "You are helping someone in a live debate. The user will paste what their opponent just said. Identify any factual claims and state whether each is accurate, then suggest one strong counterpoint. Be concise. Write in plain text with no markdown formatting.",
+    system: "You are helping someone in a live debate. The user will paste what their opponent just said. Identify any factual claims and state whether each is accurate, then suggest one strong counterpoint. Be concise.\n\nIMPORTANT: Output plain text only. Never use asterisks, hash symbols, or any markdown formatting. Write in complete sentences and paragraphs.",
     messages: [{ role: "user", content: body.text }],
   });
 
