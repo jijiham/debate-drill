@@ -8,11 +8,12 @@ Beginner at code. Strong mathematics and physics background, Ivy League student.
 
 - Explain the concept before giving the command. Never append the explanation after the code.
 - **Do not explain syntax.** Skip element names, bracket matching, and language mechanics unless he asks. Explain decisions: why a value is shaped a certain way, why one option over another, what breaks if it changes.
+- **Explain structure exhaustively.** Every change gets a walkthrough: which file, which of the three places the code runs in (browser, your server, Anthropic), in what order, and what crosses each boundary. Assume no mental model persists between messages. The syntax rule still holds — skip what a bracket does. Structure is the thing to spell out.
 - Aiden does not write code by hand. You write it. He decides architecture, predicts behaviour before running, diagnoses failures, and must be able to read every line.
 - One piece at a time. Each piece runs and is visible before the next appears.
 - Define every term at first use.
 - Repeat commands in full. Never say "run the commands from earlier."
-- When he says he is confused, write less. If he says it twice, stop and ask what specifically is not landing.
+- When he says he is confused, cut the number of open threads rather than the depth of explanation. Park tangents by name and restate the main line from the beginning. If he says it twice, stop and ask what specifically is not landing.
 - Prose: plain, logical, academic. No contrastive framing ("not X, but Y"). No punchlines or rhetorical flourish. Short declarative sentences that follow from each other.
 - Mathematical analogies land well. Function composition, invariants, images of sets under maps.
 - He pushes back directly. Course-correct immediately rather than defending the previous message.
@@ -35,7 +36,7 @@ Ship an MVP. Prefer the shortest path to something usable in a real round over c
 
 **app/page.tsx** — working. Textarea, button, loading indicator, paragraph showing the reply. Sends text to `/api/generate`.
 
-**app/api/generate/route.ts** — working, unchanged from the original build. POST handler. Guards empty input, calls the Anthropic API with a system prompt instructing plain-text output, returns the text. Round trips take three to seven seconds, essentially all of it waiting on the API.
+**app/api/generate/route.ts** — working, with web search enabled. POST handler. Guards empty input, calls the Anthropic API with a system prompt instructing plain-text output, returns the text. `tools: [{ type: "web_search_20250305", name: "web_search" }]` makes Anthropic run searches server-side inside the single call, so there is no tool loop here. `max_tokens` is 4000 rather than 1000, because search makes replies longer and the old ceiling truncated them. The reply is assembled by keeping every text block in `result.content` and joining them, since a searched response interleaves search blocks with text blocks. Round trips were three to seven seconds before search and are longer now.
 
 **app/flow/page.tsx** — in progress. Renders a static table. Column headings come from a `speeches` array; rows come from a hardcoded `rows` array. Not yet editable.
 
@@ -43,7 +44,9 @@ Ship an MVP. Prefer the shortest path to something usable in a real round over c
 
 **Input source.** A human types the opponent's speech, so the text already exists as text. No OCR and no speech-to-text is needed. The flow grid is built into the app rather than read from Google Sheets or Excel, because OAuth configuration teaches nothing about the product and adds polling latency. Reading an external sheet may be added later.
 
-**No browser extension.** An extension cannot read desktop Excel, and cannot usefully read Google Sheets because the grid is drawn on a canvas. If external reading is ever needed, the Sheets API is both easier and more reliable.
+**No browser extension for input.** An extension cannot read desktop Excel, and cannot usefully read Google Sheets because the grid is drawn on a canvas. If external reading is ever needed, the Sheets API is both easier and more reliable.
+
+**No browser extension for evidence, for now.** Anthropic's server-side fetching fails on paywalled and bot-protected pages. An extension would fix that, because the user's browser holds their logins and nothing else does. Two costs make it wrong for the MVP. It means hand-writing the client-side tool loop that server-side search exists to avoid: model asks for a URL, the page relays it to the extension, the extension loads and extracts, a second API call sends the text back. It also adds a page load and a second round trip to a wait that is already three to seven seconds, on the one axis a live-round tool cannot afford to lose. Revisit only if search alone proves insufficient in a real round, and then for a specific reason: paywalled sources Aiden personally has access to. Note that rendering citation links needs none of this and comes free with search.
 
 **No desktop overlay for now.** Floating above other applications requires Electron or Tauri. Deferred until the product works.
 
@@ -64,7 +67,7 @@ The rejected alternative was one independent list per column, where alignment is
 1. Flow grid at `/flow` with editable cells
 2. A control that sends one cell's text to `/api/generate`
 3. Rebuttal displayed beside or beneath the grid
-4. Web search enabled on the API call
+4. ~~Web search enabled on the API call~~ — done
 
 Explicitly out of scope for the MVP: streaming, the evidence repository, external spreadsheet integration, saving a flow across page refreshes, authentication, and styling beyond legibility.
 
@@ -72,20 +75,14 @@ Explicitly out of scope for the MVP: streaming, the evidence repository, externa
 
 Make the grid cells editable. `rows` moves from a module-level constant into `useState` inside the component. React state is replaced rather than mutated, so an edit constructs a new rows array instead of assigning into the existing one.
 
-## Change already drafted but never applied
+Two decisions are open and block this:
 
-Enable web search on the API call in `route.ts`.
+- **Does the MVP need an "add row" button?** A live round produces arguments nobody predicted, so three fixed rows will not survive one. If yes, it lands in the same change, and the two-places column-count flaw above has to be fixed at the same time, because whatever creates a row must derive its width from `speeches`.
+- **Does the send control take one cell or the whole row?** One cell is less code. One cell also reads "no internal link", which means close to nothing without the thread it sits in. The row gives the model the argument thread, and the column headings say who spoke when.
 
-Add to the `messages.create` call:
+## Also worth doing
 
-    tools: [{ type: "web_search_20250305", name: "web_search" }],
-
-Responses then contain search blocks alongside text blocks, so the single-block extraction must be replaced:
-
-    const reply = result.content
-      .filter((block) => block.type === "text")
-      .map((block) => (block.type === "text" ? block.text : ""))
-      .join("\n\n");
+Render citation links under the rebuttal. Web search already returns source URLs, and the current extraction keeps only text blocks, so those URLs are being discarded. This is the cheap half of "show me the sources" and needs no new infrastructure.
 
 ## Already covered — do not re-explain unprompted
 
