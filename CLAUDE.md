@@ -1,6 +1,6 @@
 # debate-drill
 
-A live debate assistant. The user flows a round into a grid. The app fact-checks the opponent's arguments and produces sourced rebuttals.
+A live debate assistant. The user flows a round into a grid. The app returns sourced rebuttal arguments against whatever the opponent said.
 
 ## How to work with Aiden
 
@@ -34,13 +34,19 @@ Ship an MVP. Prefer the shortest path to something usable in a real round over c
 
 ## Current state
 
-**app/page.tsx** — working. Textarea, button, loading indicator, paragraph showing the reply. Sends text to `/api/generate`.
+**app/page.tsx** — working. Textarea, button, loading indicator, paragraph showing the reply, and a Sources list below it. Sends text to `/api/generate`. Source links open in a new tab, because losing the page mid-round to read a citation would be worse than having no citation.
 
-**app/api/generate/route.ts** — working, with web search enabled. POST handler. Guards empty input, calls the Anthropic API with a system prompt instructing plain-text output, returns the text. `tools: [{ type: "web_search_20250305", name: "web_search" }]` makes Anthropic run searches server-side inside the single call, so there is no tool loop here. `max_tokens` is 4000 rather than 1000, because search makes replies longer and the old ceiling truncated them. The reply is assembled by keeping every text block in `result.content` and joining them, since a searched response interleaves search blocks with text blocks. Round trips were three to seven seconds before search and are longer now.
+**app/api/generate/route.ts** — working, with web search enabled. POST handler. Guards empty input, calls the Anthropic API with a system prompt instructing plain-text output, returns the text. `tools: [{ type: "web_search_20250305", name: "web_search" }]` makes Anthropic run searches server-side inside the single call, so there is no tool loop here. `max_tokens` is 4000 rather than 1000, because search makes replies longer and the old ceiling truncated them. The reply is assembled by keeping every text block in `result.content` and joining them, since a searched response interleaves search blocks with text blocks. A second pass over the same blocks collects citations into a `sources` array, deduplicated by URL, and the response body is now `{ message, sources }`. Round trips were three to seven seconds before search and are longer now.
+
+Citations rather than raw search results, deliberately. A probe of one real searched response showed the `web_search_tool_result` block carrying nine results while the text block cited one. The citation also carries `cited_text`, the exact sentence backing the claim, which is the thing worth reading aloud.
+
+The system prompt lives in `SYSTEM_PROMPT` at the top of the file, kept out of the request-building code because it is content rather than logic.
 
 **app/flow/page.tsx** — in progress. Renders a static table. Column headings come from a `speeches` array; rows come from a hardcoded `rows` array. Not yet editable.
 
 ## Design decisions already made
+
+**Not a fact-checker.** The deliverable is rebuttal ammunition, not a verdict on whether the opponent is right. Hard evidence is preferred whenever it exists — a statistic that contradicts the claim is the strongest thing to hand someone mid-round, so the prompt says to search for one and lead with it. But most of what gets said in a round is argument, opinion, or warrant rather than checkable fact, and the tool must still produce something usable in those cases: find the empirical question under the claim, or attack the reasoning. It never asks the user a clarifying question, because there is no time to answer one. An earlier system prompt framed the job as identifying factual claims and ruling on their accuracy; given an opinion it had nothing to do and asked the user questions back, which is useless in a round.
 
 **Input source.** A human types the opponent's speech, so the text already exists as text. No OCR and no speech-to-text is needed. The flow grid is built into the app rather than read from Google Sheets or Excel, because OAuth configuration teaches nothing about the product and adds polling latency. Reading an external sheet may be added later.
 
@@ -82,7 +88,7 @@ Two decisions are open and block this:
 
 ## Also worth doing
 
-Render citation links under the rebuttal. Web search already returns source URLs, and the current extraction keeps only text blocks, so those URLs are being discarded. This is the cheap half of "show me the sources" and needs no new infrastructure.
+Nothing outstanding. Citation links are done.
 
 ## Already covered — do not re-explain unprompted
 
